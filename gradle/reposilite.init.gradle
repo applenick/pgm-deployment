@@ -1,0 +1,29 @@
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.authentication.http.BasicAuthentication
+
+def requiredEnvironment = { String name ->
+    def value = System.getenv(name)
+    if (value == null || value.trim().isEmpty()) {
+        throw new GradleException("Required environment variable ${name} is not set")
+    }
+    value
+}
+
+allprojects { targetProject ->
+    targetProject.pluginManager.withPlugin("maven-publish") {
+        targetProject.extensions.configure(PublishingExtension) { publishing ->
+            publishing.repositories.maven { repository ->
+                repository.name = "reposilite"
+                repository.url = targetProject.uri(requiredEnvironment("REPOSILITE_URL"))
+                repository.credentials { credentials ->
+                    credentials.username = requiredEnvironment("REPOSILITE_USERNAME")
+                    credentials.password = requiredEnvironment("REPOSILITE_TOKEN")
+                }
+                repository.authentication {
+                    basic(BasicAuthentication)
+                }
+            }
+        }
+    }
+}
+
