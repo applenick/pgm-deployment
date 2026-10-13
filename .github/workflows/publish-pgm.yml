@@ -16,6 +16,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      NOTIFY_PROJECT: PGM
+      UPSTREAM_REPOSITORY: PGMDev/PGM
+      UPSTREAM_BRANCH: dev
+      NOTIFY_ARTIFACTS: |
+        tc.oc.pgm:core:0.16-SNAPSHOT
+        tc.oc.pgm:util:0.16-SNAPSHOT
 
     steps:
       - name: Check out publisher
@@ -35,6 +42,17 @@ jobs:
         id: upstream
         run: ./scripts/resolve-upstream.sh
 
+      - name: Notify Discord of build start
+        if: steps.upstream.outputs.should_publish == 'true'
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.upstream_sha }}
+          NOTIFY_STATUS: started
+        run: |
+          echo "BUILD_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          python3 scripts/notify-discord.py
+
       - name: Set up Java 21
         if: steps.upstream.outputs.should_publish == 'true'
         uses: actions/setup-java@v5
@@ -47,6 +65,7 @@ jobs:
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
 
       - name: Publish PGM artifacts to Reposilite
+        id: publish
         if: steps.upstream.outputs.should_publish == 'true'
         working-directory: .work/upstream
         env:
@@ -60,8 +79,20 @@ jobs:
             :core:publishPgmPublicationToReposiliteRepository
 
       - name: Record successful publication
+        id: state
         if: steps.upstream.outputs.should_publish == 'true'
         run: ./scripts/record-success.sh "${{ steps.upstream.outputs.upstream_sha }}"
+
+      - name: Notify Discord of result
+        if: ${{ always() && !cancelled() && steps.upstream.outputs.should_publish == 'true' }}
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.upstream_sha }}
+          NOTIFY_STATUS: ${{ steps.state.outcome == 'success' && 'success' || 'failure' }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          STATE_OUTCOME: ${{ steps.state.outcome }}
+        run: python3 scripts/notify-discord.py
 
       - name: Preserve build outputs after failure
         if: failure()
