@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: Force rebuild and publish even if the commit is already published
+        type: boolean
+        default: false
+        required: false
 
 concurrency:
   group: pgm-dev-publisher
@@ -17,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force || false }}
       NOTIFY_PROJECT: PGM
       UPSTREAM_REPOSITORY: PGMDev/PGM
       UPSTREAM_BRANCH: dev
@@ -40,6 +47,8 @@ jobs:
 
       - name: Compare publication state
         id: upstream
+        env:
+          FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force || false }}
         run: ./scripts/resolve-upstream.sh
 
       - name: Notify Discord of build start

@@ -49,7 +49,7 @@ def payload():
     description += "\n\n[{}]({}) · [Browse PGM Repo](https://repo.pgm.fyi)".format(label, run_url)
     return {"allowed_mentions": {"parse": []}, "embeds": [{
         "title": title, "url": run_url, "description": description, "color": color,
-        "fields": fields, "footer": {"text": "PGM Repo"},
+        "fields": fields, "footer": {"text": "PGM Repo · Forced rebuild" if env.get("FORCE_PUBLISH") == "true" else "PGM Repo"},
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }]}
 
