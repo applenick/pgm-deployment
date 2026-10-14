@@ -20,16 +20,27 @@ def payload():
         {"name": "Branch", "value": "`{}`".format(env["UPSTREAM_BRANCH"]), "inline": True},
     ]
     repo_link = "[PGM Repo](https://repo.pgm.fyi)"
+    started = env.get("BUILD_STARTED_AT")
+    if status != "started" and started:
+        seconds = max(0, int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - int(started))
+        fields.append({"name": "Duration", "value": "{}m {}s".format(seconds // 60, seconds % 60), "inline": True})
     if status == "started":
         title = project + " · Build started"
         description = "Building the latest {} commit for publication to {}.".format(project, repo_link)
         color = 3447003
-        fields.append({"name": "Triggered by", "value": "Scheduled check" if env.get("GITHUB_EVENT_NAME") == "schedule" else "Manual run"})
+        fields.append({"name": "Trigger", "value": "Scheduled" if env.get("GITHUB_EVENT_NAME") == "schedule" else "Manual", "inline": True})
     elif status == "success":
-        title = project + " · Published to PGM Repo"
+        title = project + " · Published successfully"
         description = "The latest {} build is now available on {}.".format(project, repo_link)
         color = 3066993
-        fields.append({"name": "Artifacts", "value": "\n".join("`{}`".format(a) for a in env["NOTIFY_ARTIFACTS"].splitlines() if a)})
+        artifact_links = []
+        public_repository = env.get("PUBLIC_REPOSITORY_URL", "https://repo.pgm.fyi/snapshots").rstrip("/")
+        for coordinate in env["NOTIFY_ARTIFACTS"].splitlines():
+            if coordinate:
+                group, artifact, version = coordinate.split(":")
+                artifact_url = "{}/{}/{}/{}/".format(public_repository, group.replace(".", "/"), artifact, version)
+                artifact_links.append("[`{}`]({})".format(coordinate, artifact_url))
+        fields.append({"name": "Artifacts", "value": "\n".join(artifact_links)})
     else:
         title = project + " · Publication to PGM Repo failed"
         description = "{} could not be published to {}. The next scheduled check will retry.".format(project, repo_link)
@@ -41,12 +52,8 @@ def payload():
             if env.get(key) == "failure":
                 stage = name
         fields.append({"name": "Failed stage", "value": stage})
-    started = env.get("BUILD_STARTED_AT")
-    if status != "started" and started:
-        seconds = max(0, int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - int(started))
-        fields.append({"name": "Duration", "value": "{}m {}s".format(seconds // 60, seconds % 60), "inline": True})
     label = "View failed run" if status == "failure" else "View workflow run"
-    description += "\n\n[{}]({}) · [Browse PGM Repo](https://repo.pgm.fyi)".format(label, run_url)
+    fields.append({"name": "Workflow", "value": "[{}]({})".format(label, run_url)})
     return {"allowed_mentions": {"parse": []}, "embeds": [{
         "title": title, "url": run_url, "description": description, "color": color,
         "fields": fields, "footer": {"text": "PGM Repo · Forced rebuild" if env.get("FORCE_PUBLISH") == "true" else "PGM Repo"},
